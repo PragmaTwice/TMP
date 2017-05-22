@@ -38,7 +38,8 @@ namespace meta
 			>::type::type;
 	};
 
-	// type
+	// type operation
+
 	template <typename T, typename U>
 	struct is_same_type
 	{
@@ -66,12 +67,26 @@ namespace meta
 	{
 		using type = T;
 	};
-
+	template <typename T >
+	struct remove_ptr<T * volatile>
+	{
+		using type = T;
+	};
+	template <typename T >
+	struct remove_ptr<T * const volatile>
+	{
+		using type = T;
+	};
 
 	template <typename T >
 	struct is_not_ptr
 	{
 		static constexpr bool value = is_same_type<T, typename remove_ptr<T>::type>::value;
+	};
+	template <typename T >
+	struct is_ptr
+	{
+		static constexpr bool value = !is_not_ptr<T>::value;
 	};
 
 	class remove_all_ptr_private
@@ -112,12 +127,21 @@ namespace meta
 	{
 		using type = T;
 	};
-
+	template<typename Ret, typename... Args >
+	struct remove_ref <Ret(Args...) & >
+	{
+		using type = typename Ret(Args...);
+	};
 
 	template <typename T >
 	struct is_not_ref
 	{
 		static constexpr bool value = is_same_type<T, typename remove_ref<T>::type>::value;
+	};
+	template <typename T >
+	struct is_ref
+	{
+		static constexpr bool value = !is_not_ref<T>::value;
 	};
 
 	template<typename T >
@@ -130,11 +154,27 @@ namespace meta
 	{
 		using type = T;
 	};
+	template<typename Ret, typename... Args >
+	struct remove_move <Ret(Args...) &&>
+	{
+		using type = typename Ret(Args...);
+	};
 
 	template <typename T >
 	struct is_not_move
 	{
 		static constexpr bool value = is_same_type<T, typename remove_move<T>::type>::value;
+	};
+	template <typename T >
+	struct is_move
+	{
+		static constexpr bool value = !is_not_move<T>::value;
+	};
+
+	template <typename T >
+	struct remove_rm
+	{
+		using type = typename remove_move<typename remove_ref<T>::type>::type;
 	};
 
 	template <typename T >
@@ -147,12 +187,76 @@ namespace meta
 	{
 		using type = T;
 	};
-
+	template <typename Ret, typename... Args >
+	struct remove_const <Ret(Args...) const>
+	{
+		using type = typename Ret(Args...);
+	};
 
 	template <typename T >
 	struct is_not_const
 	{
 		static constexpr bool value = is_same_type<T, typename remove_const<T>::type>::value;
+	};
+	template <typename T >
+	struct is_const
+	{
+		static constexpr bool value = !is_not_const<T>::value;
+	};
+
+
+	template <typename T >
+	struct remove_volatile
+	{
+		using type = T;
+	};
+	template <typename T >
+	struct remove_volatile <volatile T>
+	{
+		using type = T;
+	};
+	template <typename Ret, typename... Args >
+	struct remove_volatile <Ret(Args...) volatile>
+	{
+		using type = typename Ret(Args...);
+	};
+
+	template <typename T >
+	struct is_not_volatile
+	{
+		static constexpr bool value = is_same_type<T, typename remove_volatile<T>::type>::value;
+	};
+	template <typename T >
+	struct is_volatile
+	{
+		static constexpr bool value = !is_not_volatile<T>::value;
+	};
+
+	template <typename T >
+	struct remove_cv
+	{
+		using type = typename remove_const<typename remove_volatile<T>::type>::type;
+	};
+	template <typename Ret, typename... Args >
+	struct remove_cv <Ret(Args...) const volatile>
+	{
+		using type = typename Ret(Args...);
+	};
+
+	template <typename T >
+	struct remove_cvrm
+	{
+		using type = typename remove_cv<typename remove_rm<T>::type>::type;
+	};
+	template <typename Ret, typename... Args >
+	struct remove_cvrm <Ret(Args...) const volatile &>
+	{
+		using type = typename Ret(Args...);
+	};
+	template <typename Ret, typename... Args >
+	struct remove_cvrm <Ret(Args...) const volatile &&>
+	{
+		using type = typename Ret(Args...);
 	};
 
 	template <typename T >
@@ -261,20 +365,102 @@ namespace meta
 	template <typename... T >
 	struct type_array
 	{
+		static constexpr unsigned int size = sizeof...(T);
+		static constexpr unsigned int nopos = type_array_private::nopos;
+
 		template <unsigned n >
 		struct at
 		{
 			using type = typename type_array_private::at_impl<n, T...>::type;
 		};
 
-		template<typename U, unsigned start_pos = 0 >
+		template <typename U, unsigned start_pos = 0 >
 		struct find
 		{
 			static constexpr unsigned int value = type_array_private::ignore_impl<0, U, start_pos, T...>::value;
 		};
 
-		static constexpr unsigned int size = sizeof...(T);
-		static constexpr unsigned int nopos = type_array_private::nopos;
+		template <typename U >
+		struct has
+		{
+			static constexpr bool value = find<U>::value != nopos;
+		};
+
 	};
+
+
+	// constant
+
+	template <typename T, T v = T{} >
+	struct constant
+	{
+		using value_type = T;
+		static constexpr T value = v;
+	};
+
+	using true_type = constant<bool, true>;
+	using false_type = constant<bool, false>;
+
+	// type if
+
+	template <typename T >
+	struct is_void : constant <bool, is_same_type<void, typename remove_cv<T>::type>::value> {};
+
+	template <typename T >
+	struct is_integral : constant <bool, type_array<
+		bool,
+		char, signed char, unsigned char,
+		char16_t, char32_t, wchar_t,
+		signed short, unsigned short,
+		signed int, unsigned int,
+		signed long, unsigned long,
+		signed long long, unsigned long long
+	>::has<typename remove_cv<T>::type>::value> {};
+
+	template <typename T >
+	struct is_floating_point :constant<bool, type_array<
+		float, double, long double
+	>::has<typename remove_cv<T>::type>::value> {};
+
+	template <typename T >
+	struct is_array : false_type {};
+	template <typename T >
+	struct is_array <T []> : true_type {};
+	template <typename T, unsigned N >
+	struct is_array <T [N]> : true_type {};
+
+	// whether a type is a class , struct , or union
+	template <typename T >
+	class is_class
+	{
+		struct does_be_class {};
+		struct is_not_class {};
+
+		template <class T> does_be_class test(int T::*);
+		template <class T> is_not_class test(...);
+
+	public:
+
+		static constexpr bool value = is_same_type<decltype(test<T>(nullptr)), does_be_class>::value;
+
+	};
+
+	class is_function_private
+	{
+		template <typename T >
+		struct impl : false_type {};
+
+		template <typename Ret, typename... Args >
+		struct impl <Ret(Args...)> :true_type {};
+
+		template <typename Ret, typename... Args >
+		struct impl <Ret(Args...,...)> :true_type {};
+
+		template <typename T >
+		friend struct is_function;
+	};
+	template <typename T >
+	struct is_function : is_function_private::impl<typename remove_cvrm<T>::type> {};
+
 
 }
