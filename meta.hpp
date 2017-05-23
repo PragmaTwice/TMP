@@ -51,71 +51,7 @@ namespace meta
 		static constexpr bool value = true;
 	};
 
-
-	template <typename T >
-	struct remove_ptr
-	{
-		using type = T;
-	};
-	template <typename T >
-	struct remove_ptr<T *>
-	{
-		using type = T;
-	};
-	template <typename T >
-	struct remove_ptr<T * const>
-	{
-		using type = T;
-	};
-	template <typename T >
-	struct remove_ptr<T * volatile>
-	{
-		using type = T;
-	};
-	template <typename T >
-	struct remove_ptr<T * const volatile>
-	{
-		using type = T;
-	};
-
-	template <typename T >
-	struct is_not_ptr
-	{
-		static constexpr bool value = is_same_type<T, typename remove_ptr<T>::type>::value;
-	};
-	template <typename T >
-	struct is_ptr
-	{
-		static constexpr bool value = !is_not_ptr<T>::value;
-	};
-
-	class remove_all_ptr_private
-	{
-		template <bool, typename T >
-		struct impl
-		{
-		};
-		template <typename T >
-		struct impl<false, T>
-		{
-			using type =
-				typename impl<is_not_ptr<T>::value, typename remove_ptr<T>::type>::type;
-		};
-		template <typename T >
-		struct impl<true, T>
-		{
-			using type = T;
-		};
-
-		template <typename T >
-		friend struct remove_all_ptr;
-	};
-	template <typename T >
-	struct remove_all_ptr
-	{
-		using type = typename remove_all_ptr_private::impl<is_not_ptr<T>::value, T>::type;
-	};
-
+	// lvalue ref
 
 	template<typename T >
 	struct remove_ref
@@ -143,6 +79,8 @@ namespace meta
 	{
 		static constexpr bool value = !is_not_ref<T>::value;
 	};
+
+	// rvalue ref
 
 	template<typename T >
 	struct remove_move
@@ -175,6 +113,11 @@ namespace meta
 	struct remove_rm
 	{
 		using type = typename remove_move<typename remove_ref<T>::type>::type;
+	};
+	template <typename T >
+	struct is_lr_ref
+	{
+		static constexpr bool value = is_same_type<T,typename remove_rm<T>::type>::value;
 	};
 
 	template <typename T >
@@ -277,22 +220,90 @@ namespace meta
 		using type = const T;
 	};
 
+	class remove_ptr_private
+	{
+		template <typename T >
+		struct impl
+		{
+			using type = T;
+		};
+		template <typename T >
+		struct impl<T *>
+		{
+			using type = T;
+		};
+		template <typename T >
+		friend struct remove_ptr;
+	};
+	template <typename T >
+	struct remove_ptr
+	{
+		using type = typename remove_ptr_private::impl<typename remove_cv<T>::type>::type;
+	};
+
+	template <typename T >
+	struct is_not_ptr
+	{
+		static constexpr bool value = is_same_type<T, typename remove_ptr<T>::type>::value;
+	};
+	template <typename T >
+	struct is_ptr
+	{
+		static constexpr bool value = !is_not_ptr<T>::value;
+	};
+
+	class remove_all_ptr_private
+	{
+		template <bool, typename T >
+		struct impl
+		{
+		};
+		template <typename T >
+		struct impl<false, T>
+		{
+			using type =
+				typename impl<is_not_ptr<T>::value, typename remove_ptr<T>::type>::type;
+		};
+		template <typename T >
+		struct impl<true, T>
+		{
+			using type = T;
+		};
+
+		template <typename T >
+		friend struct remove_all_ptr;
+	};
+	template <typename T >
+	struct remove_all_ptr
+	{
+		using type = typename remove_all_ptr_private::impl<is_not_ptr<T>::value, T>::type;
+	};
+
+	// constant
+
+	template <typename T, T v = T{} >
+	struct constant
+	{
+		using value_type = T;
+		static constexpr T value = v;
+	};
+
+	using true_type = constant<bool, true>;
+	using false_type = constant<bool, false>;
+
 
 	template<class T, class U>
 	class can_converse_to
 	{
 
-		struct can_converse {};
-		struct cannot_converse {};
-
-		static can_converse test(U);
-		static cannot_converse test(...);
+		static true_type test(U);
+		static false_type test(...);
 
 		static T make_T();
 
 	public:
 
-		static constexpr bool value = is_same_type<decltype(test(make_T())), can_converse>::value;
+		static constexpr bool value = decltype(test(make_T()))::value;
 
 	};
 
@@ -303,15 +314,13 @@ namespace meta
 		template<typename T>                                                                                  \
 		struct has_typedef_ ## _type                                                                          \
 		{                                                                                                     \
-			struct does_have_typedef {};                                                                      \
-			struct not_has_typedef {};                                                                        \
 			                                                                                                  \
-			template<typename C> static does_have_typedef test(typename C:: _type *);                         \
-			template<typename> static not_has_typedef test(...);                                              \
+			template<typename C> static true_type test(typename C:: _type *);                         \
+			template<typename> static false_type test(...);                                              \
 			                                                                                                  \
 		public:                                                                                               \
 			                                                                                                  \
-			static constexpr bool value = is_same_type<decltype(test<T>(nullptr)), does_have_typedef>::value; \
+			static constexpr bool value = decltype(test<T>(nullptr))::value; \
 			                                                                                                  \
 		};                                                                                                    \
 	}
@@ -389,22 +398,15 @@ namespace meta
 	};
 
 
-	// constant
-
-	template <typename T, T v = T{} >
-	struct constant
-	{
-		using value_type = T;
-		static constexpr T value = v;
-	};
-
-	using true_type = constant<bool, true>;
-	using false_type = constant<bool, false>;
-
 	// type if
 
 	template <typename T >
-	struct is_void : constant <bool, is_same_type<void, typename remove_cv<T>::type>::value> {};
+	struct is_void : constant <bool, is_same_type <void, typename remove_cv<T>::type>::value> {};
+
+	using nullptr_type = decltype(nullptr);
+
+	template <typename T >
+	struct is_nullptr_type : is_same_type <nullptr_type, typename remove_cv<T>::type> {};
 
 	template <typename T >
 	struct is_integral : constant <bool, type_array<
@@ -418,9 +420,11 @@ namespace meta
 	>::has<typename remove_cv<T>::type>::value> {};
 
 	template <typename T >
-	struct is_floating_point :constant<bool, type_array<
+	struct is_floating_point :constant <bool, type_array <
 		float, double, long double
 	>::has<typename remove_cv<T>::type>::value> {};
+
+	// array
 
 	template <typename T >
 	struct is_array : false_type {};
@@ -429,19 +433,37 @@ namespace meta
 	template <typename T, unsigned N >
 	struct is_array <T [N]> : true_type {};
 
+	template <typename T >
+	struct array_dimensions : constant<unsigned, 0> {};
+	template <typename T >
+	struct array_dimensions <T[]> : constant<unsigned, array_dimensions<T>::value + 1> {};
+	template <typename T, unsigned N >
+	struct array_dimensions <T[N]> : constant<unsigned, array_dimensions<T>::value + 1> {};
+
+	template<class T, unsigned N = 0>
+	struct array_dimension_length : constant<unsigned, 0> {};
+	template<class T>
+	struct array_dimension_length<T[], 0> : constant<unsigned, (unsigned)(-1)> {};
+	template<class T, unsigned N>
+	struct array_dimension_length<T[], N> : array_dimension_length<T, N - 1> {};
+	template<class T, unsigned L>
+	struct array_dimension_length<T[L], 0> : constant<unsigned, L> {};
+	template<class T, unsigned L, unsigned N>
+	struct array_dimension_length<T[L], N> : array_dimension_length<T, N - 1> {};
+
+
 	// whether a type is a class , struct , or union
+
 	template <typename T >
 	class is_class
 	{
-		struct does_be_class {};
-		struct is_not_class {};
 
-		template <class T> does_be_class test(int T::*);
-		template <class T> is_not_class test(...);
+		template <class T> static true_type test(int T::*);
+		template <class T> static false_type test(...);
 
 	public:
 
-		static constexpr bool value = is_same_type<decltype(test<T>(nullptr)), does_be_class>::value;
+		static constexpr bool value = decltype(test<T>(nullptr))::value;
 
 	};
 
@@ -461,6 +483,75 @@ namespace meta
 	};
 	template <typename T >
 	struct is_function : is_function_private::impl<typename remove_cvrm<T>::type> {};
+
+	template <typename T >
+	struct is_arithmetic : constant <
+		bool,
+		is_integral<T>::value ||
+		is_floating_point<T>::value
+	> {};
+
+	template< class T >
+	struct is_fundamental : constant <
+		bool,
+		is_arithmetic<T>::value ||
+		is_void<T>::value ||
+		is_nullptr_type<T>::value
+	> {};
+
+
+	// is base of
+
+	struct is_base_of_private
+	{
+		template <typename Base> static true_type test(Base*);
+		template <typename Base> static false_type test(void*);
+
+		template <typename Base, typename Derived>
+		using impl = decltype(test<Base>((typename remove_cv<Derived>::type*)(nullptr)));
+
+		template <typename Base, typename Derived>
+		friend struct is_base_of;
+	};
+
+	template <typename Base, typename Derived>
+	struct is_base_of : IF<
+		is_class<Base>::value && is_class<Derived>::value,
+		typename is_base_of_private::impl <Base, Derived>,
+		false_type
+	>::type {};
+
+	// (un/)signed
+
+	class is_signed_private
+	{
+		template<typename T, bool = is_arithmetic<T>::value>
+		struct impl : constant<bool, T(-1) < T(0) > {};
+
+		template<typename T>
+		struct impl<T, false> : false_type {};
+
+		template<typename T>
+		friend struct is_signed;
+	};
+
+	template<typename T>
+	struct is_signed : is_signed_private::impl<T>::type {};
+
+	class is_unsigned_private
+	{
+		template<typename T, bool = is_arithmetic<T>::value>
+		struct impl : constant<bool, T(0) < T(-1)> {};
+
+		template<typename T>
+		struct impl<T, false> : false_type {};
+
+		template<typename T>
+		friend struct is_unsigned;
+	};
+
+	template<typename T>
+	struct is_unsigned : is_unsigned_private::impl<T>::type {};
 
 
 }
