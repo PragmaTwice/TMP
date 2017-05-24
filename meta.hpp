@@ -220,6 +220,18 @@ namespace meta
 		using type = const T;
 	};
 
+	template <typename T >
+	struct add_volatile
+	{
+		using type = volatile T;
+	};
+
+	template <typename T >
+	struct add_cv
+	{
+		using type = typename add_volatile<typename add_const<T>::type>::type;
+	};
+
 	class remove_ptr_private
 	{
 		template <typename T >
@@ -288,6 +300,7 @@ namespace meta
 		static constexpr T value = v;
 	};
 
+
 	using true_type = constant<bool, true>;
 	using false_type = constant<bool, false>;
 
@@ -315,12 +328,12 @@ namespace meta
 		struct has_typedef_ ## _type                                                                          \
 		{                                                                                                     \
 			                                                                                                  \
-			template<typename C> static true_type test(typename C:: _type *);                         \
-			template<typename> static false_type test(...);                                              \
+			template<typename C> static true_type test(typename C:: _type *);                                 \
+			template<typename> static false_type test(...);                                                   \
 			                                                                                                  \
 		public:                                                                                               \
 			                                                                                                  \
-			static constexpr bool value = decltype(test<T>(nullptr))::value; \
+			static constexpr bool value = decltype(test<T>(nullptr))::value;                                  \
 			                                                                                                  \
 		};                                                                                                    \
 	}
@@ -329,7 +342,61 @@ namespace meta
 #define has_typedef(_type) has_typedef_ ## _type
 
 
-	//type container
+	// template void
+
+	template <typename... T >
+	using template_void = void;
+
+	// template class
+
+	template <template <typename... > class T, typename... U >
+	using template_class = T<U...>;
+
+	// copy template para
+
+	template <template <typename... > class T, typename U >
+	struct copy_template_para 
+	{
+		using type = void;
+	};
+
+	template <template <typename... > class T, template <typename... > class U, typename... V >
+	struct copy_template_para <T,U <V...>> 
+	{
+		using type = T <V...>;
+	};
+
+	// merge template para
+
+	class merge_template_para_private
+	{
+		template <template <typename... > class T, typename U1, typename U2 >
+		struct impl
+		{
+			using type = void;
+		};
+		template <template <typename... > class T, template <typename... > class U1, typename... V1, template <typename... > class U2, typename... V2 >
+		struct impl <T, U1 <V1...>, U2 <V2...>>
+		{
+			using type = T <V1..., V2...>;
+		};
+
+		template <template <typename... > class T, typename U1, typename... Un >
+		friend struct merge_template_para;
+	};
+	template <template <typename... > class T, typename U1, typename... Un >
+	struct merge_template_para
+	{
+		using type = typename merge_template_para_private::impl<T,U1,typename merge_template_para<T,Un...>::type>::type;
+	};
+	template <template <typename... > class T, typename U1, typename U2 >
+	struct merge_template_para <T,U1,U2>
+	{
+		using type = typename merge_template_para_private::impl<T, U1, U2>::type;
+	};
+
+	// type container
+
 	class type_array_private
 	{
 		static constexpr unsigned int nopos = -1;
@@ -356,7 +423,7 @@ namespace meta
 			static constexpr unsigned int value = is_same_type<T, U>::value ? k : nopos;
 		};
 
-		template < unsigned k, typename T, unsigned n, typename U, typename... V >
+		template <unsigned k, typename T, unsigned n, typename U, typename... V >
 		struct ignore_impl
 		{
 			static constexpr unsigned int value = ignore_impl<k + 1, T, n, V...>::value;
@@ -365,6 +432,17 @@ namespace meta
 		struct ignore_impl<n, T, n, U, V...>
 		{
 			static constexpr unsigned int value = find_impl<T,n,U,V...>::value;
+		};
+
+		template <typename T, typename U, typename... V >
+		struct count_impl
+		{
+			static constexpr unsigned int value = (is_same_type<T, U>::value ? 1 : 0) + count_impl<T,V...>::value;
+		};
+		template <typename T, typename U>
+		struct count_impl <T,U>
+		{
+			static constexpr unsigned int value = (is_same_type<T, U>::value ? 1 : 0);
 		};
 
 		template <typename... T >
@@ -382,6 +460,12 @@ namespace meta
 		{
 			using type = typename type_array_private::at_impl<n, T...>::type;
 		};
+		
+		template <unsigned... n >
+		struct at_s
+		{
+			using type = typename type_array<typename at<n>::type...>;
+		};
 
 		template <typename U, unsigned start_pos = 0 >
 		struct find
@@ -395,8 +479,22 @@ namespace meta
 			static constexpr bool value = find<U>::value != nopos;
 		};
 
+		template <typename U >
+		struct count
+		{
+			static constexpr unsigned int value = type_array_private::count_impl<U,T...>::value;
+		};
+
 	};
 
+
+	// copy template para to type array
+
+	template <typename U >
+	struct make_type_array_bypara
+	{
+		using type = typename copy_template_para<type_array, U>::type;
+	};
 
 	// type if
 
@@ -502,7 +600,7 @@ namespace meta
 
 	// is base of
 
-	struct is_base_of_private
+	class is_base_of_private
 	{
 		template <typename Base> static true_type test(Base*);
 		template <typename Base> static false_type test(void*);
@@ -552,6 +650,19 @@ namespace meta
 
 	template<typename T>
 	struct is_unsigned : is_unsigned_private::impl<T>::type {};
+
+
+
+	// enable if
+
+	template <bool, typename T = void >
+	struct enable_if {};
+
+	template <typename T >
+	struct enable_if <true, T> 
+	{ 
+		using type = T;
+	};
 
 
 }
