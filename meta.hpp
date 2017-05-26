@@ -352,6 +352,31 @@ namespace meta
 	template <template <typename... > class T, typename... U >
 	using template_class = T<U...>;
 
+	template <typename T >
+	struct is_from_template_class
+	{
+		static constexpr bool value = false;
+	};
+
+	template <template <typename... > class T, typename... U >
+	struct is_from_template_class <T<U...>>
+	{
+		static constexpr bool value = true;
+	};
+
+	template <typename T >
+	struct get_template_from_spec
+	{
+		using type = void;
+	};
+
+	template <template <typename... > class T, typename... U >
+	struct get_template_from_spec <T<U...>>
+	{
+		template <typename... V>
+		using type = T<V...>;
+	};
+
 	// copy template para
 
 	template <template <typename... > class T, typename U >
@@ -394,6 +419,7 @@ namespace meta
 	{
 		using type = typename merge_template_para_private::impl<T, U1, U2>::type;
 	};
+
 
 	// type container
 
@@ -487,7 +513,6 @@ namespace meta
 
 	};
 
-
 	// copy template para to type array
 
 	template <typename U >
@@ -495,6 +520,21 @@ namespace meta
 	{
 		using type = typename copy_template_para<type_array, U>::type;
 	};
+
+	// push back/forward template para
+
+	template <typename T, typename... U >
+	struct push_template_para_back
+	{
+		using type = typename merge_template_para<typename get_template_from_spec<T>::type, T, type_array<U...>>::type;
+	};
+
+	template <typename T, typename... U>
+	struct push_template_para_forward
+	{
+		using type = typename merge_template_para<typename get_template_from_spec<T>::type, type_array<U...>, T>::type;
+	};
+
 
 	// type if
 
