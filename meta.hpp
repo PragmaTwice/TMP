@@ -353,13 +353,13 @@ namespace meta
 	using template_class = T<U...>;
 
 	template <typename T >
-	struct is_from_template_class
+	struct is_template_class_spec
 	{
 		static constexpr bool value = false;
 	};
 
 	template <template <typename... > class T, typename... U >
-	struct is_from_template_class <T<U...>>
+	struct is_template_class_spec <T<U...>>
 	{
 		static constexpr bool value = true;
 	};
@@ -535,6 +535,69 @@ namespace meta
 		using type = typename merge_template_para<typename get_template_from_spec<T>::type, type_array<U...>, T>::type;
 	};
 
+	// pop back/forward template para
+
+	template <template <typename... > typename V >
+	class pop_template_para_forward_private
+	{
+		template <typename T, typename ...U >
+		struct impl
+		{
+			using type = typename V<U...>;
+		};
+
+		template <typename T>
+		friend class pop_template_para_forward;
+	};
+	template <typename T >
+	class pop_template_para_forward
+	{
+		using impl_type = typename copy_template_para<
+			typename pop_template_para_forward_private<
+				typename get_template_from_spec<T>::type
+			>::template impl,
+			T
+		>::type;
+
+	public:
+
+		using type = typename impl_type::type;
+
+	};
+
+	template <template <typename... > typename V >
+	class pop_template_para_back_private
+	{
+		template <typename T, typename ...U >
+		struct impl
+		{
+			using type = typename push_template_para_forward<typename impl<U...>::type,T>::type;
+		};
+
+		template <typename T >
+		struct impl<T>
+		{
+			using type = V<>;
+		};
+
+		template <typename T>
+		friend class pop_template_para_back;
+	};
+	template <typename T >
+	class pop_template_para_back
+	{
+		using impl_type = typename copy_template_para<
+			typename pop_template_para_back_private<
+				typename get_template_from_spec<T>::type
+			>::template impl,
+			T
+		>::type;
+
+	public:
+
+		using type = typename impl_type::type;
+
+	};
 
 	// type if
 
