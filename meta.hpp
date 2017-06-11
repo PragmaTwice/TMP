@@ -304,6 +304,83 @@ namespace meta
 	using true_type = constant<bool, true>;
 	using false_type = constant<bool, false>;
 
+	template <typename T >
+	class constant_array
+	{
+		struct value_impl
+		{
+			static constexpr unsigned int nopos = -1;
+
+			template <unsigned n, T v, T... w >
+			struct at : at<n - 1, w...> {};
+			template <T v, T... w >
+			struct at <0, v, w...> : constant<T,v> {};
+
+			template <T v, unsigned k, T w, T... x >
+			struct find
+			{
+				static constexpr unsigned int value = (v == w) ? k : find<v, k + 1, x...>::value;
+			};
+			template <T v, unsigned k, T w>
+			struct find<v, k, w>
+			{
+				static constexpr unsigned int value = (v == w) ? k : nopos;
+			};
+
+			template <unsigned k, T v, unsigned n, T w, T... x >
+			struct ignore
+			{
+				static constexpr unsigned int value = ignore<k + 1, v, n, x...>::value;
+			};
+			template <T v, unsigned n, T w, T... x>
+			struct ignore<n, v, n, w, x...>
+			{
+				static constexpr unsigned int value = find<v, n, w, x...>::value;
+			};
+
+			template <T v, T w, T... x >
+			struct count
+			{
+				static constexpr unsigned int value = ((v == w) ? 1 : 0) + count<v, x...>::value;
+			};
+			template <T v, T w>
+			struct count <v, w>
+			{
+				static constexpr unsigned int value = ((v == w) ? 1 : 0);
+			};
+		};
+
+	public:
+
+		using value_type = T;
+		
+		template <T... v >
+		struct value
+		{
+			static constexpr unsigned int nopos = value_impl::nopos;
+
+			template <unsigned n >
+			struct at : value_impl::at<n,v...> {};
+
+			template <unsigned... n >
+			struct at_s
+			{
+				using type = typename constant_array<T>::value<at<n>::value...>;
+			};
+
+			template <T w, unsigned start_pos = 0 >
+			struct find : value_impl::ignore<0, w, start_pos, v...> {};
+
+			template <T w >
+			struct has : constant <bool, find<w>::value != nopos> {};
+
+			template <T w >
+			struct count : value_impl::count<w, v...> {};
+		};
+	};
+
+	template <typename T, T... v >
+	using constant_array_value = typename constant_array<T>::value<v...>;
 
 	template<class T, class U>
 	class can_converse_to
@@ -482,10 +559,7 @@ namespace meta
 		static constexpr unsigned int nopos = type_array_private::nopos;
 
 		template <unsigned n >
-		struct at
-		{
-			using type = typename type_array_private::at_impl<n, T...>::type;
-		};
+		struct at : type_array_private::at_impl<n, T...> {};
 		
 		template <unsigned... n >
 		struct at_s
@@ -494,22 +568,13 @@ namespace meta
 		};
 
 		template <typename U, unsigned start_pos = 0 >
-		struct find
-		{
-			static constexpr unsigned int value = type_array_private::ignore_impl<0, U, start_pos, T...>::value;
-		};
+		struct find : type_array_private::ignore_impl<0, U, start_pos, T...> {};
 
 		template <typename U >
-		struct has
-		{
-			static constexpr bool value = find<U>::value != nopos;
-		};
+		struct has : constant <bool, find<U>::value != nopos> {};
 
 		template <typename U >
-		struct count
-		{
-			static constexpr unsigned int value = type_array_private::count_impl<U,T...>::value;
-		};
+		struct count : type_array_private::count_impl<U,T...> {};
 
 	};
 
@@ -668,6 +733,8 @@ namespace meta
 
 	};
 
+	// function operation
+
 	class is_function_private
 	{
 		template <typename T >
@@ -684,6 +751,59 @@ namespace meta
 	};
 	template <typename T >
 	struct is_function : is_function_private::impl<typename remove_cvrm<T>::type> {};
+
+	class get_return_type_private
+	{
+		template <typename T >
+		struct impl 
+		{
+			using type = void;
+		};
+
+		template <typename Ret, typename... Args >
+		struct impl <Ret(Args...)>
+		{
+			using type = Ret;
+		};
+
+		template <typename Ret, typename... Args >
+		struct impl <Ret(Args..., ...)>  
+		{
+			using type = Ret;
+		};
+
+		template <typename T >
+		friend struct get_return_type;
+	};
+	template <typename T >
+	struct get_return_type : get_return_type_private::impl<typename remove_cvrm<T>::type> {};
+
+	class get_para_type_private
+	{
+		template <typename T >
+		struct impl
+		{
+			using type = void;
+		};
+
+		template <typename Ret, typename... Args >
+		struct impl <Ret(Args...)>
+		{
+			using type = type_array<Args...>;
+		};
+
+		template <typename Ret, typename... Args >
+		struct impl <Ret(Args..., ...)>
+		{
+			using type = type_array<Args...>;
+		};
+
+		template <typename T >
+		friend struct get_para_type;
+	};
+	template <typename T >
+	struct get_para_type : get_para_type_private::impl<typename remove_cvrm<T>::type> {};
+
 
 	template <typename T >
 	struct is_arithmetic : constant <
